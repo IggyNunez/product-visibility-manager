@@ -1,0 +1,392 @@
+{% comment %}
+  Product Visibility Manager - App Embed
+  This automatically loads on all pages
+{% endcomment %}
+
+<style>
+  /* Product Visibility Manager Styles */
+  .pvm-restricted {
+    position: relative !important;
+    overflow: hidden !important;
+  }
+  
+  .pvm-restricted > *:not(.pvm-overlay-wrapper) {
+    filter: blur({{ block.settings.blur_amount }}px) !important;
+    opacity: 0.4 !important;
+    pointer-events: none !important;
+    user-select: none !important;
+  }
+  
+  .pvm-overlay-wrapper {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 999 !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+  
+  .pvm-overlay-content {
+    background: {{ block.settings.overlay_bg }} !important;
+    color: {{ block.settings.overlay_text_color }} !important;
+    padding: 20px !important;
+    border-radius: 10px !important;
+    text-align: center !important;
+    max-width: 280px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2) !important;
+  }
+  
+  .pvm-overlay-icon {
+    font-size: 32px !important;
+    margin-bottom: 10px !important;
+  }
+  
+  .pvm-overlay-message {
+    font-weight: 600 !important;
+    margin-bottom: 15px !important;
+  }
+  
+  .pvm-overlay-button {
+    display: inline-block !important;
+    background: {{ block.settings.button_bg }} !important;
+    color: {{ block.settings.button_text_color }} !important;
+    padding: 10px 24px !important;
+    border-radius: 5px !important;
+    text-decoration: none !important;
+    font-weight: 600 !important;
+    transition: opacity 0.3s !important;
+  }
+  
+  .pvm-overlay-button:hover {
+    opacity: 0.9 !important;
+    text-decoration: none !important;
+  }
+  
+  .pvm-badge {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    background: #FFD700 !important;
+    color: #000000 !important;
+    padding: 4px 10px !important;
+    border-radius: 20px !important;
+    font-size: 11px !important;
+    font-weight: bold !important;
+    text-transform: uppercase !important;
+    z-index: 1000 !important;
+  }
+</style>
+
+<script>
+(function() {
+  'use strict';
+  
+  console.log('[PVM] Product Visibility Manager initializing...');
+  
+  // Configuration
+  const config = {
+    enabled: {{ block.settings.enabled | json }},
+    icon: {{ block.settings.icon | json }},
+    message: {{ block.settings.message | json }},
+    buttonText: {{ block.settings.button_text | json }},
+    buttonUrl: {{ block.settings.button_url | json }},
+    showBadge: {{ block.settings.show_badge | json }},
+    badgeText: {{ block.settings.badge_text | json }}
+  };
+  
+  if (!config.enabled) {
+    console.log('[PVM] Product Visibility Manager is disabled');
+    return;
+  }
+  
+  // Collect hidden products from Liquid
+  const hiddenProducts = new Set();
+  
+  {% comment %} Load hidden products - using a more efficient approach {% endcomment %}
+  {% assign hidden_product_count = 0 %}
+  {% paginate collections.all.products by 250 %}
+    {% for product in collections.all.products %}
+      {% if product.metafields.visibility_manager.hidden == true %}
+        {% assign hidden_product_count = hidden_product_count | plus: 1 %}
+        hiddenProducts.add('{{ product.id }}');
+        hiddenProducts.add('{{ product.handle }}');
+        hiddenProducts.add('gid://shopify/Product/{{ product.id }}');
+      {% endif %}
+    {% endfor %}
+  {% endpaginate %}
+  
+  console.log('[PVM] Found ' + hiddenProducts.size + ' hidden product identifiers');
+  
+  if (hiddenProducts.size === 0) {
+    console.log('[PVM] No products are marked as hidden');
+    return;
+  }
+  
+  function findProductContainer(element) {
+    // Try to find the product card/container
+    const selectors = [
+      '.product-card',
+      '.product-item', 
+      '.grid__item',
+      '.card',
+      '.product',
+      'article',
+      'li'
+    ];
+    
+    for (const selector of selectors) {
+      const container = element.closest(selector);
+      if (container) return container;
+    }
+    
+    // If no container found, go up a few levels
+    let parent = element.parentElement;
+    let levels = 0;
+    while (parent && levels < 5) {
+      if (parent.querySelector('img') || parent.querySelector('.product-')) {
+        return parent;
+      }
+      parent = parent.parentElement;
+      levels++;
+    }
+    
+    return element;
+  }
+  
+  function restrictProduct(element) {
+    if (element.classList.contains('pvm-restricted')) {
+      return; // Already processed
+    }
+    
+    element.classList.add('pvm-restricted');
+    
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'pvm-overlay-wrapper';
+    
+    let overlayHTML = '<div class="pvm-overlay-content">';
+    if (config.icon) {
+      overlayHTML += '<div class="pvm-overlay-icon">' + config.icon + '</div>';
+    }
+    if (config.message) {
+      overlayHTML += '<div class="pvm-overlay-message">' + config.message + '</div>';
+    }
+    if (config.buttonText && config.buttonUrl) {
+      overlayHTML += '<a href="' + config.buttonUrl + '" class="pvm-overlay-button">' + config.buttonText + '</a>';
+    }
+    overlayHTML += '</div>';
+    
+    overlay.innerHTML = overlayHTML;
+    element.appendChild(overlay);
+    
+    // Add badge if enabled
+    if (config.showBadge && config.badgeText) {
+      const badge = document.createElement('div');
+      badge.className = 'pvm-badge';
+      badge.textContent = config.badgeText;
+      element.appendChild(badge);
+    }
+    
+    // Disable all interactive elements
+    element.querySelectorAll('a:not(.pvm-overlay-button), button, form').forEach(el => {
+      el.style.pointerEvents = 'none';
+      el.style.cursor = 'not-allowed';
+      if (el.tagName === 'A') {
+        el.removeAttribute('href');
+      }
+      if (el.tagName === 'BUTTON') {
+        el.disabled = true;
+      }
+    });
+    
+    console.log('[PVM] Restricted product element');
+  }
+  
+  function processProducts() {
+    let processedCount = 0;
+    
+    // Method 1: Find products by links
+    document.querySelectorAll('a[href*="/products/"]').forEach(link => {
+      const href = link.getAttribute('href') || link.href;
+      if (!href) return;
+      
+      // Extract product handle from URL
+      const match = href.match(/\/products\/([^\/\?#]+)/);
+      if (!match) return;
+      
+      const handle = match[1];
+      
+      if (hiddenProducts.has(handle)) {
+        const container = findProductContainer(link);
+        if (container && !container.classList.contains('pvm-restricted')) {
+          restrictProduct(container);
+          processedCount++;
+        }
+      }
+    });
+    
+    // Method 2: Find products by data attributes
+    document.querySelectorAll('[data-product-id], [data-product-handle]').forEach(element => {
+      const productId = element.getAttribute('data-product-id');
+      const productHandle = element.getAttribute('data-product-handle');
+      
+      if ((productId && hiddenProducts.has(productId)) || 
+          (productHandle && hiddenProducts.has(productHandle))) {
+        if (!element.classList.contains('pvm-restricted')) {
+          restrictProduct(element);
+          processedCount++;
+        }
+      }
+    });
+    
+    if (processedCount > 0) {
+      console.log('[PVM] Processed ' + processedCount + ' products');
+    }
+  }
+  
+  // Process products when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', processProducts);
+  } else {
+    processProducts();
+  }
+  
+  // Process again after a delay for lazy-loaded content
+  setTimeout(processProducts, 1000);
+  setTimeout(processProducts, 2000);
+  
+  // Watch for dynamic content
+  const observer = new MutationObserver(function() {
+    clearTimeout(window.pvmDebounce);
+    window.pvmDebounce = setTimeout(processProducts, 200);
+  });
+  
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+  
+  // Handle infinite scroll and AJAX
+  let lastUrl = location.href;
+  new MutationObserver(() => {
+    const url = location.href;
+    if (url !== lastUrl) {
+      lastUrl = url;
+      setTimeout(processProducts, 100);
+    }
+  }).observe(document, {subtree: true, childList: true});
+  
+  // Expose for debugging
+  window.PVM = {
+    processProducts: processProducts,
+    hiddenProducts: Array.from(hiddenProducts),
+    config: config
+  };
+  
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Product Visibility Manager",
+  "target": "body",
+  "settings": [
+    {
+      "type": "header",
+      "content": "General Settings"
+    },
+    {
+      "type": "checkbox",
+      "id": "enabled",
+      "label": "Enable Product Hiding",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Overlay Settings"
+    },
+    {
+      "type": "text",
+      "id": "icon",
+      "label": "Icon (Emoji)",
+      "default": "🔒"
+    },
+    {
+      "type": "text",
+      "id": "message",
+      "label": "Overlay Message",
+      "default": "VIP Members Only"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "Get VIP Access"
+    },
+    {
+      "type": "url",
+      "id": "button_url",
+      "label": "Button URL",
+      "default": "/pages/vip-membership"
+    },
+    {
+      "type": "header",
+      "content": "Badge Settings"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_badge",
+      "label": "Show Badge",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "badge_text",
+      "label": "Badge Text",
+      "default": "VIP ONLY"
+    },
+    {
+      "type": "header",
+      "content": "Visual Settings"
+    },
+    {
+      "type": "range",
+      "id": "blur_amount",
+      "label": "Blur Amount",
+      "min": 0,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 8
+    },
+    {
+      "type": "color",
+      "id": "overlay_bg",
+      "label": "Overlay Background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "overlay_text_color",
+      "label": "Overlay Text Color",
+      "default": "#333333"
+    },
+    {
+      "type": "color",
+      "id": "button_bg",
+      "label": "Button Background",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text Color",
+      "default": "#ffffff"
+    }
+  ]
+}
+{% endschema %}

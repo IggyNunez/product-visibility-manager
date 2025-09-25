@@ -1,0 +1,42 @@
+{% comment %}
+  Product Visibility Manager - Data Injection
+  This snippet injects hidden product data into the page for the global script
+{% endcomment %}
+
+{%- comment -%}
+  Load global CSS and JS automatically
+{%- endcomment -%}
+{{ 'product-visibility-global.css' | asset_url | stylesheet_tag }}
+{{ 'product-visibility-global.js' | asset_url | script_tag }}
+
+{%- comment -%}
+  Inject hidden products data
+{%- endcomment -%}
+<script type="application/json" id="product-visibility-data">
+{
+  {%- for product in collections.all.products limit: 2000 -%}
+    {%- assign is_hidden = product.metafields.visibility_manager.hidden -%}
+    {%- if is_hidden == true -%}
+      "{{ product.id }}": true,
+      "{{ product.handle }}": true,
+    {%- endif -%}
+  {%- endfor -%}
+  "initialized": true
+}
+</script>
+
+<script>
+  // Make hidden products immediately available to the global script
+  (function() {
+    try {
+      const dataElement = document.getElementById('product-visibility-data');
+      if (dataElement && window.ProductVisibilityManager) {
+        const data = JSON.parse(dataElement.textContent);
+        const hiddenProducts = Object.keys(data).filter(k => k !== 'initialized');
+        window.ProductVisibilityManager.setHiddenProducts(hiddenProducts);
+      }
+    } catch (e) {
+      console.error('Error initializing product visibility:', e);
+    }
+  })();
+</script>

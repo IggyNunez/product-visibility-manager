@@ -1,0 +1,6 @@
+api_version = "2025-07"
+
+[[extensions]]
+type = "theme_app_extension"
+name = "Product Visibility Control"
+handle = "product-visibility-control"
